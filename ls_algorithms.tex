@@ -1,0 +1,96 @@
+\documentclass[10pt]{article}
+\usepackage[left=2.54cm,top=2.54cm,right=2.54cm,bottom=2.54cm]{geometry}
+\usepackage{acronym}
+\usepackage{afterpage}
+\usepackage{algpseudocode}
+\usepackage{algorithm}
+\usepackage{bibspacing}
+\usepackage{bm}
+\usepackage{comment}
+\usepackage{fancyhdr}
+\usepackage{float}
+\usepackage[inline]{enumitem}
+\usepackage{sectsty}
+\usepackage{setspace}
+\usepackage{url}
+\usepackage{subcaption}
+\usepackage{nicefrac}
+\usepackage{units}
+\usepackage{booktabs}
+\usepackage{xcolor}
+\begin{document}
+General conservation laws that govern physical systems, when
+discretized in space and time and cast in iterative form almost
+always result in sparse linear system of form:
+\begin{equation}
+  A \Delta q = B
+\end{equation}
+One of the techniques to iteratively solve the system is to use a
+Gauss-Seidel preconditioner. One multi-threaded systems, one will
+have to create a color order to create a parallel iterative
+technique. Coloring involves grouping the variables in X, such that
+for every row, the group associated with the degree of freedom
+corresponding to an off-diagonal entry is different from
+group associated with the diagonal degree of freedom.
+Once, coloring has been established, the system above can be
+represented as
+\begin{equation}
+  (L+D+U) \Delta q = B
+\end{equation}
+where $L$ corresponds to off-diagonal elements of a smaller color
+compared to that of the diagonal entry, $D$ is the diagonal entry
+and $U$ corresponds to off-diagonal elements of a larger color.
+Given these, the Gauss-Seidel algorithm can be written as follows:
+\begin{algorithm}
+\caption{Exawind driver}
+\label{alg:driver}
+\begin{algorithmic}[1]
+
+\State Create MPI sub-communicators near-body-comm and off-body-comm
+\If{rank $\subset$ near-body-comm}
+        \State Initialize near-body solver \Comment{Multiple instances of near-body solver allowed}
+\EndIf
+
+\If{rank  $\subset$ off-body-comm}
+    \State Initialize off-body solver \Comment{Only single instance allowed}
+\EndIf
+
+\State Initialize TIOGA \Comment{For all ranks}
+\For{$t = 0; t < T; t \leftarrow t+1$} \Comment{Where T is the total number of time steps}
+        \If{near-body mesh movement $\|$ off-body mesh adaption $\|$ $t == 0$}
+        \State Perform overset connectivity
+        \EndIf
+        \State Exchange overset solution
+         \For{$p = 0; p < P; p \leftarrow p+1$} \Comment{Where P is the total number of Picard iterations}
+        \State Perform near-body time step
+     \EndFor
+     \State Perform off-body time step \Comment{Executed in parallel to the near-body time step}
+
+        \If{additional Picards}
+        \State Exchange overset solution
+        \For{$p = 0; p < P; p \leftarrow p+1$} \Comment{Where P is the total number of Picard iterations}
+                \State Perform near-body time step
+        \EndFor
+        \EndIf
+
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+
+\begin{algorithm}
+  \caption{Colored Gauss Seidel Algorithm}
+  \begin{algorithmic}[1]	
+  \For{$i = 0; i < niter; i \leftarrow i+1$} \comment {Iteration loop}
+  %\For{$color=0;$color<ncolors;color \leftarray color+1$}
+  %\Delta x = D^{-1}(B[i]-L*dq_{c < color}-U*dq_{c>color})
+  %\EndFor
+  %\For{$color=ncolors-1;$color>=ncolors;color \leftarray color-1$}
+  %\Delta x = D^{-1}(B[i]-L*dq_{c < color}-U*dq_{c>color})
+  %\EndFor
+  %\EndFor
+  \end{algorithmic}
+\end{algorithm}
+
+\end{document}
+  
