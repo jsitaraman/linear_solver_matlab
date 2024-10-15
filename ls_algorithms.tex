@@ -1,34 +1,33 @@
 \documentclass[10pt]{article}
 \usepackage[left=2.54cm,top=2.54cm,right=2.54cm,bottom=2.54cm]{geometry}
-\usepackage{acronym}
 \usepackage{afterpage}
-\usepackage{algpseudocode}
 \usepackage{algorithm}
-\usepackage{bibspacing}
+\usepackage{algpseudocode}
 \usepackage{bm}
-\usepackage{comment}
 \usepackage{fancyhdr}
 \usepackage{float}
 \usepackage[inline]{enumitem}
-\usepackage{sectsty}
 \usepackage{setspace}
 \usepackage{url}
 \usepackage{subcaption}
-\usepackage{nicefrac}
-\usepackage{units}
 \usepackage{booktabs}
 \usepackage{xcolor}
 \begin{document}
-General conservation laws that govern physical systems, when
-discretized in space and time and cast in iterative form almost
+General conservation laws that govern physical systems written in 
+PDE form as 
+\begin{equation}
+q_t + \nabla . (F(q)) = 0
+\end{equation}
+when discretized in space and time and cast in iterative form almost
 always result in sparse linear system of form:
 \begin{equation}
   A \Delta q = B
 \end{equation}
-One of the techniques to iteratively solve the system is to use a
+that needs to be solved iterative in every non-linear cycle of solution
+scheme. One of the techniques to iteratively solve the system is to use a
 Gauss-Seidel preconditioner. One multi-threaded systems, one will
 have to create a color order to create a parallel iterative
-technique. Coloring involves grouping the variables in X, such that
+technique. Coloring involves grouping the variables in $\Delta q$, such that
 for every row, the group associated with the degree of freedom
 corresponding to an off-diagonal entry is different from
 group associated with the diagonal degree of freedom.
@@ -40,57 +39,83 @@ represented as
 where $L$ corresponds to off-diagonal elements of a smaller color
 compared to that of the diagonal entry, $D$ is the diagonal entry
 and $U$ corresponds to off-diagonal elements of a larger color.
-Given these, the Gauss-Seidel algorithm can be written as follows:
-\begin{algorithm}
-\caption{Exawind driver}
-\label{alg:driver}
-\begin{algorithmic}[1]
-
-\State Create MPI sub-communicators near-body-comm and off-body-comm
-\If{rank $\subset$ near-body-comm}
-        \State Initialize near-body solver \Comment{Multiple instances of near-body solver allowed}
-\EndIf
-
-\If{rank  $\subset$ off-body-comm}
-    \State Initialize off-body solver \Comment{Only single instance allowed}
-\EndIf
-
-\State Initialize TIOGA \Comment{For all ranks}
-\For{$t = 0; t < T; t \leftarrow t+1$} \Comment{Where T is the total number of time steps}
-        \If{near-body mesh movement $\|$ off-body mesh adaption $\|$ $t == 0$}
-        \State Perform overset connectivity
-        \EndIf
-        \State Exchange overset solution
-         \For{$p = 0; p < P; p \leftarrow p+1$} \Comment{Where P is the total number of Picard iterations}
-        \State Perform near-body time step
-     \EndFor
-     \State Perform off-body time step \Comment{Executed in parallel to the near-body time step}
-
-        \If{additional Picards}
-        \State Exchange overset solution
-        \For{$p = 0; p < P; p \leftarrow p+1$} \Comment{Where P is the total number of Picard iterations}
-                \State Perform near-body time step
-        \EndFor
-        \EndIf
-
-\EndFor
-\end{algorithmic}
-\end{algorithm}
-
-
+Given these, the Gauss-Seidel algorithm can be written as follows, 
+where one loops forward and backward in colors
 \begin{algorithm}
   \caption{Colored Gauss Seidel Algorithm}
-  \begin{algorithmic}[1]	
-  \For{$i = 0; i < niter; i \leftarrow i+1$} \comment {Iteration loop}
-  %\For{$color=0;$color<ncolors;color \leftarray color+1$}
-  %\Delta x = D^{-1}(B[i]-L*dq_{c < color}-U*dq_{c>color})
-  %\EndFor
-  %\For{$color=ncolors-1;$color>=ncolors;color \leftarray color-1$}
-  %\Delta x = D^{-1}(B[i]-L*dq_{c < color}-U*dq_{c>color})
-  %\EndFor
-  %\EndFor
+  \begin{algorithmic}[1]
+  \For{$i = 0, \dots, niter$} %\comment {Iteration loop}
+      \State o=0
+      \If {$i > 0$}
+        \State o=1
+      \EndIf
+      \For{$color=1+o, \dots, ncolors$}
+        \For{$k \in colorgoup(color)$}
+         \State $\Delta q_k = {D_k}^{-1}(B_k-L_{kj}\Delta q_{color(j) < color}-U_{kj}\Delta q_{color(j) >color})$
+        \EndFor
+      \EndFor
+      \For{$color=ncolors-1, \dots, 1$ }
+       \For{$k \in colorgoup(color)$}
+         \State $\Delta q_k = {D_k}^{-1}(B_k-L_{kj}\Delta q_{color(j) < color}-U_{kj}\Delta q_{color(j) > color})$
+       \EndFor
+      \EndFor
+  \EndFor
   \end{algorithmic}
 \end{algorithm}
-
+Lines 7 and 10 of the algorithm above are fully parallel loops can be fully multi-threaded
+on a gpu for each $k$. All of $L_{kj}$, $D_k$ and $U_{kj}$, $j \in non-zero\hspace{0.05in}entries\hspace{0.05in}in
+\hspace{0.05in}row_k\hspace{0.05in}of\hspace{0.05in}A$ are block matrices of 
+size $nq\times nq$, where $nq=5$ for laminar Navier-Stokes equations. To improve the fetch patterns, 
+we can do a few things.
+\begin{enumerate}
+  \item Precondition each row with $D_k^{-1}$ to begin with and store 
+        $D_k^{-1}L_{kj}$ and $D_k^{-1}U_{kj}$
+  \item Store products $L_{kj}\Delta q_{c < color}$ and $U_{kj}\Delta q_{c>color}$ in a 
+        intermediate variables in the forward sweep and backward sweep, 
+        so that they can be reused in reverse order, i.e. in the backward sweep and
+        forward sweep respectively. This will require only fetching $L$ in the forward
+        loop and only $U$ in the backward loop
+\end{enumerate}
+With these modifications, the "Low-fetch Colored Gauss-Seidel" algorithm can be formulated as
+\begin{algorithm}
+  \caption{Low-fetch Colored Gauss Seidel Algorithm}
+  \begin{algorithmic}[1]
+  \State Adq=0
+  \State $L_{kj}=D_k^{-1}L_{kj}$
+  \State $U_{kj}=D_k^{-1}U_{kj}$
+  \State $B_k = D_k^{-1}B_k$
+  \For{$i = 0, \dots, niter$} %\comment {Iteration loop}
+      \State o=0
+      \If {$i > 0$}
+        \State o=1
+      \EndIf
+      \For{$color=1+o, \dots, ncolors$}
+        \For{$k \in colorgoup(color)$}
+         \State $\Delta q_k = (B_k-L_{kj}\Delta q_{color(j) < color}-Adq_k)$
+         \State $Adq_k = L\Delta q_{color(j) < color}$
+        \EndFor
+      \EndFor
+      \For{$k \in colorgoup(1)$}
+        \State $Adq_k=0$
+      \EndFor
+      \For{$color=ncolors-1, \dots, 1$ }
+        \For{$k \in colorgoup(color)$}
+        \State $\Delta q_k = (B_k-U_{kj}\Delta q_{color(j) >color}-Adq_k)$
+        \State $Adq_k = U_{kj}\Delta q_{color(j) < color}$
+        \EndFor
+      \EndFor
+      \For{$k \in colorgoup(ncolor)$}
+        \State $Adq_k=0$
+      \EndFor
+  \EndFor
+  \end{algorithmic}
+\end{algorithm}
+The implementations of this algorithm, the baseline algorithm as well as a
+sequential GS algorithm in MATLAB/OCTAVE are included in this folder. It can
+be observed that both the baseline and new algorithm give identical results
+in terms of solution convergence and residuals. Implementations on GPUs can
+follow this general framework. 
 \end{document}
   
+
+

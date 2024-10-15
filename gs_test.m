@@ -19,6 +19,8 @@ B=rand(1,N);
 niter=20;
 display("--Original method ---")
 dq1=sweepsolve_orig(A,B,colors,colormap,cft,niter);
+norm(A*dq1'-B')
 display("--Low fetch method ---")
 dq2=sweepsolve_lowfetch(A,B,colors,colormap,cft,niter);
+norm(dq1-dq2)
 %dq=sequential_gs(A,B,niter);

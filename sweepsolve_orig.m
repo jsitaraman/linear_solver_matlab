@@ -4,7 +4,7 @@ function dq=sweepsolve_orig(A,B,colors,colormap,cft,niter)
 ncolors=length(cft)-1;
 indx=[1:N];
 dq=zeros(1,N);
-niter=20;
+%niter=20;
 %
 for n=1:niter
  is=1;

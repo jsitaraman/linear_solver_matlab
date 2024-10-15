@@ -1,19 +1,21 @@
 % function to show algorithm for low fetch
 % colored Gauss-Seidel
 function dq=sweepsolve_lowfetch(A,B,colors,colormap,cft,niter)
+%A=A1;
+%B=B1;
 [N,M]=size(A);
 ncolors=length(cft)-1;
 indx=[1:N];
 dq=zeros(1,N);
 adq=zeros(1,N);
-niter=20;
+%niter=20;
 % precondition with diagonals once so that 
 % we don't have to fetch A(i,i)
 % this can be already included in the
 % Jacobian calculation
 for i=1:N
-  A(i,:)=A(i,:)/A(i,i);
   B(i)=B(i)/A(i,i);
+  A(i,:)=A(i,:)/A(i,i);
 end
 %
 for n=1:niter
@@ -45,25 +47,27 @@ for n=1:niter
 	  % vector, it has smaller overhead
           if (colors(ineig)*idir < c*idir)
 	    rhs=rhs-A(i,ineig)*dq(ineig);
-	    adq(i)=adq(i)+A(i,ineig)*dq(ineig);
+	    if (c!=ncolors && c!=1)
+  	      adq(i)=adq(i)+A(i,ineig)*dq(ineig);
+	    end
 	  end
 	end
-	dq(i)=rhs;%/A(i,i);
+	dq(i)=rhs; %/A(i,i);
      end
   end
   %we have to zero out the the off-diagonal product for 
   %min/max colors even if are not iterating the color
-  if (idir==-1)
-    for ii=cft(ncolors):cft(ncolors+1)-1
-       i=colormap(ii);
-       adq(i)=0;
-    end
-  else
-    for ii=cft(1):cft(2)-1
-       i=colormap(ii);
-       adq(i)=0;
-    end
-  end
+  %if (idir==-1)
+  %  for ii=cft(ncolors):cft(ncolors+1)-1
+  %     i=colormap(ii);
+  %     adq(i)=0;
+  %  end
+  %else
+  %  for ii=cft(1):cft(2)-1
+  %     i=colormap(ii);
+  %     adq(i)=0;
+  %  end
+  %end
  end     
  norm(A*dq'-B')
 end
