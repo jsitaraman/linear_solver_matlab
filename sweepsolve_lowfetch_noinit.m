@@ -1,13 +1,15 @@
 % function to show algorithm for low fetch
 % colored Gauss-Seidel
-function dq=sweepsolve_lowfetch(A,B,colors,colormap,cft,niter)
+function [dq1,adq1]=sweepsolve_lowfetch_noinit(A,B,colors,colormap,cft,niter,dq,adq)
 %A=A1;
 %B=B1;
 [N,M]=size(A);
 ncolors=length(cft)-1;
 indx=[1:N];
-dq=zeros(1,N);
-adq=zeros(1,N);
+%dq=dq*0;
+%adq=adq*0;
+%dq=zeros(1,N);
+%adq=zeros(1,N);
 %niter=20;
 % precondition with diagonals once so that 
 % we don't have to fetch A(i,i)
@@ -47,7 +49,7 @@ for n=1:niter
 	  % vector, it has smaller overhead
           if (colors(ineig)*idir < c*idir)
 	    rhs=rhs-A(i,ineig)*dq(ineig);
-	    if (c!=ncolors && c!=1)
+	    if ((c!=ncolors && c!=1) || (n==niter && c==1))
   	      adq(i)=adq(i)+A(i,ineig)*dq(ineig);
 	    end
 	  end
@@ -71,4 +73,6 @@ for n=1:niter
  end     
  norm(A*dq'-B')
 end
+dq1=dq;
+adq1=adq;
 
